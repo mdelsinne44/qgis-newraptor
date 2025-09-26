@@ -31,6 +31,7 @@ from qgis.core import QgsProject, QgsFeature, QgsGeometry, QgsPoint
 from .resources import *
 # Import the code for the dialog
 from .new_raptor_dialog import NewRaptorDialog
+from .impact_table import DlgTable
 import os.path
 
 
@@ -233,6 +234,8 @@ class NewRaptor:
             valStatus = self.dlg.cmbStatus.currentText()
             valLast = self.dlg.dteLast.date().toString("yyyy-MM-dd")
             QMessageBox.information(self.dlg,"Message","New Nest ID will be {}\n\nLatitude: {}\nLongitude: {}\nSpecies: {}\nBuffer: {}\nStatus: {}\nLast Observed: {}".format(valNestID, valLat, valLng, valSpecies, valBuffer, valStatus, valLast))
+            
+            # add new nest
             ftNest = QgsFeature(lyrNests.fields())
             ftNest.setAttribute("lat_y_dd", valLat)
             ftNest.setAttribute("long_x_dd", valLng)
@@ -254,6 +257,12 @@ class NewRaptor:
             lyrBuffer.addFeature(ftBuffer)
             lyrBuffer.commitChanges()
             QMessageBox.information(self.dlg,"Message","New nest and buffer added to layers")
+
+            dlgTable = DlgTable()
+            dlgTable.show()
+            dlgTable.exec_()
+
+
         else:
             QMessageBox.information(self.dlg,"Message","Should only run if cancelled")
 
