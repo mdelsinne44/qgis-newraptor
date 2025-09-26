@@ -23,7 +23,7 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QDate
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QTableWidgetItem
 
 from qgis.core import QgsProject, QgsFeature, QgsGeometry, QgsPoint
 
@@ -207,6 +207,8 @@ class NewRaptor:
             missing_layers.append("Raptor Nests")
         if not "Raptor Buffer" in map_layers:
             missing_layers.append("Raptor Buffer")
+        if not "Linear Buffer" in map_layers:
+            missing_layers.append("Linear Buffer")
         if missing_layers:
             msg = "The following layers are missing from this project:\n"
             for lyr in missing_layers:
@@ -225,6 +227,7 @@ class NewRaptor:
             # substitute with your code.
             lyrNests = QgsProject.instance().mapLayersByName("Raptor Nests")[0]
             lyrBuffer = QgsProject.instance().mapLayersByName("Raptor Buffer")[0]
+            LyrLinear = QgsProject.instance().mapLayersByName("Linear Buffer")[0]
             idxNestID = lyrNests.fields().indexOf("Nest_ID")
             valNestID= lyrNests.maximumValue(idxNestID) + 1
             valLat = self.dlg.spbLatitude.value()
@@ -236,29 +239,49 @@ class NewRaptor:
             QMessageBox.information(self.dlg,"Message","New Nest ID will be {}\n\nLatitude: {}\nLongitude: {}\nSpecies: {}\nBuffer: {}\nStatus: {}\nLast Observed: {}".format(valNestID, valLat, valLng, valSpecies, valBuffer, valStatus, valLast))
             
             # add new nest
-            ftNest = QgsFeature(lyrNests.fields())
-            ftNest.setAttribute("lat_y_dd", valLat)
-            ftNest.setAttribute("long_x_dd", valLng)
-            ftNest.setAttribute("recentspec", valSpecies)
-            ftNest.setAttribute("buf_dist", valBuffer)
-            ftNest.setAttribute("recentstat", valStatus)
-            ftNest.setAttribute("lastsurvey", valLast)
-            ftNest.setAttribute("Nest_ID", valNestID)
-            geom = QgsGeometry( QgsPoint(valLng, valLat) )
+            ftNest = QgsFeature()
+            ftNest.setFields(lyrNests.fields())  # Assure la structure des champs
+            ftNest.setAttribute(lyrNests.fields().indexOf("lat_y_dd"), valLat)
+            ftNest.setAttribute(lyrNests.fields().indexOf("long_x_dd"), valLng)
+            ftNest.setAttribute(lyrNests.fields().indexOf("recentspec"), valSpecies)
+            ftNest.setAttribute(lyrNests.fields().indexOf("buf_dist"), valBuffer)
+            ftNest.setAttribute(lyrNests.fields().indexOf("recentstat"), valStatus)
+            ftNest.setAttribute(lyrNests.fields().indexOf("lastsurvey"), valLast)
+            ftNest.setAttribute(lyrNests.fields().indexOf("Nest_ID"), valNestID)
+            geom = QgsGeometry(QgsPoint(valLng, valLat))
             ftNest.setGeometry(geom)
             lyrNests.startEditing()
             lyrNests.addFeature(ftNest)
             lyrNests.commitChanges()
             # create buffer
-            geomBuffer = geom.buffer(valBuffer, 10)
+            buffer = geom.buffer(valBuffer, 10)
             ftBuffer = QgsFeature(lyrBuffer.fields())
-            ftBuffer.setGeometry(geomBuffer)
+            ftBuffer.setGeometry(buffer)
             lyrBuffer.startEditing()
             lyrBuffer.addFeature(ftBuffer)
             lyrBuffer.commitChanges()
             QMessageBox.information(self.dlg,"Message","New nest and buffer added to layers")
 
             dlgTable = DlgTable()
+            dlgTable.setWindowTitle("Impacts Table for Nest ID {}".format(valNestID))
+            # Find linear projects that will be impacted and report them in the table
+            bb = buffer.boundingBox()
+            Linears = LyrLinear.getFeatures(bb)
+            for linear in Linears:
+                valID = linear.attribute('Project')
+                valType = linear.attribute('type')
+                valDistance = linear.geometry().distance(geom)
+                if valDistance < valBuffer:
+                    # Populate table with linear data
+                    row = dlgTable.tableImpacts.rowCount()
+                    dlgTable.tableImpacts.insertRow(row)
+                    dlgTable.tableImpacts.setItem(row, 0, QTableWidgetItem(str(valID)))
+                    dlgTable.tableImpacts.setItem(row, 1, QTableWidgetItem(str(valType)))
+                    twi = QTableWidgetItem(str("{:4.5f}".format(valDistance)))
+                    twi.setTextAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+                    dlgTable.tableImpacts.setItem(row, 2, twi)
+
+            dlgTable.tableImpacts.sortItems(2)
             dlgTable.show()
             dlgTable.exec_()
 
